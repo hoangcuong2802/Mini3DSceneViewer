@@ -11,11 +11,11 @@ Project structure:
 
 src/ 
 ├── main.js 
-├── scene/ 
-├── controls/ 
-├── interaction/ 
-├── ui/ 
-└── utils/ 
+ ├── scene/ 
+ ├── controls/ 
+ ├── interaction/ 
+ ├── ui/ 
+ └── utils/ 
 
 1.2.Install dependencies 
 
