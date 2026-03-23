@@ -15,63 +15,117 @@ export function setupScene() {
 
   const pickables = [];
 
-  // 👉 prefab reference (KHÔNG đổi tên object)
-  let prefab = null;
-
-  // =========================
-  // GROUND (GRID)
-  // =========================
-  const size = 50;
-  const divisions = 50;
+  // GROUND (OPTIMIZED TEXTURE)
   const textureLoader = new THREE.TextureLoader();
-  const groundTexture = textureLoader.load('./assets/ground-texture-soil.jpg'); // texture đất
 
-  const groundGeo = new THREE.PlaneGeometry(size, size);
-  const groundMat = new THREE.MeshStandardMaterial({
-    map: groundTexture,
-    side: THREE.DoubleSide,
+  // one single texture (cache in Three.js)
+  const groundTexture = textureLoader.load(
+    './assets/ground-texture.jpg',
+    () => console.log('Ground texture loaded'),
+    undefined,
+    (err) => console.error('Texture error:', err)
+  );
+
+  // display optmise
+  groundTexture.wrapS = THREE.RepeatWrapping;
+  groundTexture.wrapT = THREE.RepeatWrapping;
+  groundTexture.repeat.set(10, 10);
+
+  // correct color 
+  groundTexture.colorSpace = THREE.SRGBColorSpace;
+
+  // texture quality
+  groundTexture.anisotropy = 4;
+
+  const groundMaterial = new THREE.MeshStandardMaterial({
+    map: groundTexture
   });
 
-  const ground = new THREE.Mesh(groundGeo, groundMat);
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(50, 50),
+    groundMaterial
+  );
+
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0,0,0)
   ground.receiveShadow = true;
 
   scene.add(ground);
 
-  const grid = new THREE.GridHelper(size, divisions);
-  scene.add(grid);
+  // grid helper (debug + visual)
+  scene.add(new THREE.GridHelper(50, 50));
 
-  // =========================
-  // LOAD MODEL
-  // =========================
+  // PREFABS
   const loader = new GLTFLoader();
+  const prefabs = {};
 
-  loader.load('./assets/block_rock.glb', (gltf) => {
-    prefab = gltf.scene; // 👉 giữ nguyên object
+  function loadPrefab(name, path) {
+    loader.load(
+      path,
+      (gltf) => {
+        const root = gltf.scene;
 
-    prefab.position.set(0, 1, 0);
-    prefab.scale.set(1,1,1);
-    prefab.traverse(obj => {
+        root.traverse(obj => {
+          if (obj.isMesh) {
+            obj.userData.isPrefab = true;
+
+            //  precompute bounding for performance (raycast + culling)
+            if (!obj.geometry.boundingSphere) {
+              obj.geometry.computeBoundingSphere();
+            }
+          }
+        });
+
+        prefabs[name] = root;
+        console.log('Loaded prefab:', name);
+      },
+      undefined,
+      (err) => console.error('Load error:', err)
+    );
+  }
+
+  loadPrefab('block', './assets/block_rock.glb');
+  loadPrefab('stair', './assets/stone_stairs.glb');
+  loadPrefab('rock', './assets/block_sand_rock.glb');
+
+  // SPAWN OBJECT
+  function spawnObject(type) {
+    const original = prefabs[type];
+    if (!original) {
+      console.warn('Prefab not ready:', type);
+      return null;
+    }
+
+    const instance = original.clone(true);
+
+    instance.position.set(0, 1, 0);
+
+    instance.traverse(obj => {
       if (obj.isMesh) {
-        obj.userData.isPrefab = true; // tag để detect
+        obj.castShadow = true; //obj cast shadow
+        obj.receiveShadow = true;  //optional
+        obj.userData.isPrefab = true;
+
+        // REMOVE material clone (IMPORTANT for performance)
+        // highlight material
+        // if (Array.isArray(obj.material)) {
+        //   obj.material = obj.material.map(m => m.clone());
+        // } else {
+        //   obj.material = obj.material.clone();
+        // }
+
+        // ensure bounding (safe fallback)
+        if (!obj.geometry.boundingSphere) {
+          obj.geometry.computeBoundingSphere();
+        }
+
         pickables.push(obj);
       }
     });
 
-    scene.add(prefab);
-  });
+    scene.add(instance);
 
-  // 👉 getter để dùng bên ngoài (placement clone)
-  function getPrefab() {
-    return prefab;
+    return instance;
   }
 
-  return {
-    scene,
-    camera,
-    pickables,
-    ground,
-    getPrefab
-  };
+  return { scene, camera, pickables, ground, spawnObject };
 }

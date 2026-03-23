@@ -6,24 +6,24 @@ import { setupRaycaster } from './interaction/raycaster.js';
 import { setupPlacement } from './interaction/placement.js';
 import { setupGUI } from './ui/gui.js';
 import { setupPerformance } from './utils/performance.js';
+import { setupObjectUI } from './ui/objectUI.js';
+import { setupFrustumCulling } from './utils/frustumCulling.js';
 
-async function init() {
-  const { scene, camera, pickables, ground } = setupScene();
+function init() {
+  const { scene, camera, pickables, ground, spawnObject } = setupScene();
 
   const renderer = createRenderer();
   setupLighting(scene);
 
   const controls = setupCameraControls(camera, renderer.domElement);
-  document.body.appendChild(renderer.domElement);
 
-  // 🔥 pass domElement vào system
   const raycasterSystem = setupRaycaster(
     camera,
     pickables,
     renderer.domElement
   );
 
-  const placement = setupPlacement(
+  setupPlacement(
     scene,
     camera,
     ground,
@@ -31,40 +31,25 @@ async function init() {
     renderer.domElement
   );
 
+  setupObjectUI(spawnObject);
+
   const perf = setupPerformance();
   const gui = setupGUI(scene, renderer, perf, raycasterSystem);
+  
+  const frustumSystem = setupFrustumCulling(camera, scene);
 
-  // =========================
-  // RESIZE (OPTIONAL: debounce nếu muốn)
-  // =========================
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-
-  // =========================
-  // LOOP
-  // =========================
   function animate() {
     requestAnimationFrame(animate);
 
     controls.update();
     perf.update();
     gui.update();
+    frustumSystem.update(); 
 
     renderer.render(scene, camera);
   }
 
   animate();
-
-  // =========================
-  // CLEANUP (PRO LEVEL)
-  // =========================
-  window.addEventListener('beforeunload', () => {
-    raycasterSystem.dispose?.();
-    placement.dispose?.();
-  });
 }
 
-init();
+window.addEventListener('DOMContentLoaded', init);

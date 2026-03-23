@@ -1,27 +1,29 @@
-let currentPrefab = null;
-
-export function setupObjectUI() {
+export function setupObjectUI(spawnObject) {
   const panel = document.getElementById('object-ui');
+
+  if (!panel) {
+    console.warn('object-ui not found');
+    return;
+  }
+
   const buttons = panel.querySelectorAll('button');
+
+  let activeBtn = null;
 
   buttons.forEach(btn => {
     btn.addEventListener('click', () => {
-      currentPrefab = btn.dataset.type;
-      console.log("Selected prefab:", currentPrefab);
+      const type = btn.dataset.type;
+
+      const obj = spawnObject(type);
+
+      if (obj) {
+        console.log('Spawned:', type);
+      }
+
+      // UI highlight
+      if (activeBtn) activeBtn.classList.remove('active');
+      btn.classList.add('active');
+      activeBtn = btn;
     });
   });
-
-  function show() {
-    panel.classList.remove('hidden');
-  }
-
-  function hide() {
-    panel.classList.add('hidden');
-  }
-
-  function getSelected() {
-    return currentPrefab;
-  }
-
-  return { show, hide, getSelected };
 }

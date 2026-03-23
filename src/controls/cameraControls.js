@@ -3,9 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 export function setupCameraControls(camera, domElement) {
   const controls = new OrbitControls(camera, domElement);
 
-  // =========================
-  // KEYBOARD CONTROL
-  // =========================
+  // KEYBOARD CONTROL (optinal not trigger all)
   controls.enableKeys = true;
 
   controls.keys = {
@@ -15,12 +13,10 @@ export function setupCameraControls(camera, domElement) {
     BOTTOM: 40  // ArrowDown
   };
 
-  // tốc độ pan bằng keyboard
+  // span speed for keyboard
   controls.keyPanSpeed = 50;
 
-  // =========================
   // SMOOTH MOVEMENT
-  // =========================
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
 

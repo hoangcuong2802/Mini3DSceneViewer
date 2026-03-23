@@ -7,6 +7,7 @@ import * as THREE from 'three';
 // - Cache bounding box to avoid recalculation
 // - Scoped events + cleanup
 
+
 export function setupPlacement(
   scene,
   camera,
@@ -15,8 +16,8 @@ export function setupPlacement(
   domElement,
   gridSize = 1
 ) {
-  const mouse = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
 
   const previewPos = new THREE.Vector3();
   const dummy = new THREE.Object3D();
@@ -24,34 +25,45 @@ export function setupPlacement(
   let previewInstance = null;
   let previewSource = null;
 
-  // 🔥 bounding box cache
+  // bounding box cache
   const bbox = new THREE.Box3();
   const size = new THREE.Vector3();
 
   let cachedHeight = 0;
   let lastSelected = null;
 
+  // GRID OCCUPANCY CHECK
+  const occupied = new Map(); // key: "x_z"
+
+  function getCellKey(pos) {
+    return `${pos.x}_${pos.z}`;
+  }
+
+  function isOccupied(pos) {
+    return occupied.has(getCellKey(pos));
+  }
+
+  function setOccupied(pos, obj) {
+    occupied.set(getCellKey(pos), obj);
+  }
+
+  // PREVIEW MATERIAL
   const previewMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     transparent: true,
     opacity: 0.5
   });
 
-  // =========================
   // GRID SNAP
-  // =========================
   function snap(pos) {
     pos.x = Math.round(pos.x / gridSize) * gridSize;
     pos.z = Math.round(pos.z / gridSize) * gridSize;
   }
 
-  // =========================
-  // CREATE PREVIEW
-  // =========================
+  // CREATE AND REMOVE GHOST REVIEW
   function createPreview(original) {
-    if (!original) return;
-
     let mesh = null;
+
     original.traverse(obj => {
       if (obj.isMesh && !mesh) mesh = obj;
     });
@@ -66,30 +78,30 @@ export function setupPlacement(
       1
     );
 
-    previewInstance.castShadow = false;
-    previewInstance.receiveShadow = false;
-
     previewSource = original;
 
     scene.add(previewInstance);
   }
 
-  // =========================
-  // REMOVE PREVIEW
-  // =========================
   function removePreview() {
     if (!previewInstance) return;
 
     scene.remove(previewInstance);
+    
+    //add dispose for optimise
+    previewInstance.geometry.dispose();
+    previewInstance.material.dispose();
+    
     previewInstance = null;
     previewSource = null;
   }
 
-  // =========================
   // UPDATE POSITION
-  // =========================
-  function updatePreviewPosition(pos) {
+  function updatePreviewPosition(pos, valid) {
     if (!previewInstance) return;
+
+    // change preview color if blocked
+    previewMaterial.color.set(valid ? 0x00ff00 : 0xff0000);
 
     dummy.position.copy(pos);
     dummy.updateMatrix();
@@ -98,9 +110,7 @@ export function setupPlacement(
     previewInstance.instanceMatrix.needsUpdate = true;
   }
 
-  // =========================
   // POINTER MOVE
-  // =========================
   function onPointerMove(event) {
     if (!raycasterSystem.isPlacing()) {
       removePreview();
@@ -118,96 +128,71 @@ export function setupPlacement(
 
     raycaster.setFromCamera(mouse, camera);
 
-    const hits = raycaster.intersectObject(ground);
-    if (!hits.length) {
+    const hit = raycaster.intersectObject(ground)[0];
+    if (!hit) {
       removePreview();
       return;
     }
 
-    previewPos.copy(hits[0].point);
-
+    previewPos.copy(hit.point);
     snap(previewPos);
 
-    // 🔥 chỉ tính bounding box khi đổi object
+    // HEIGHT CACHE
     if (selected !== lastSelected) {
       bbox.setFromObject(selected);
       bbox.getSize(size);
-
       cachedHeight = size.y;
       lastSelected = selected;
     }
 
-    // 🔥 align đúng mặt đất (không cần offset cứng)
-    previewPos.y = hits[0].point.y + cachedHeight / 2;
+    previewPos.y = hit.point.y + cachedHeight / 2;
+
+    const valid = !isOccupied(previewPos);
 
     if (!previewInstance || previewSource !== selected) {
       createPreview(selected);
     }
 
-    updatePreviewPosition(previewPos);
+    updatePreviewPosition(previewPos, valid);
   }
 
-  // =========================
-  // RIGHT CLICK → PLACE
-  // =========================
+  // RIGHT CLICK TO PLACE
   function onRightClick(event) {
     event.preventDefault();
 
     if (!raycasterSystem.isPlacing()) return;
 
     const selected = raycasterSystem.getSelected();
-    if (!selected) {
-      removePreview();
+    if (!selected) return;
+
+    // block if object detected
+    if (isOccupied(previewPos)) {
+      console.log('Cell occupied!');
       return;
     }
 
-    // 🔥 dùng đúng previewPos (không snap lại)
-    selected.position.set(previewPos.x, previewPos.y - cachedHeight / 2, previewPos.z);
-    //selected.position.copy(previewPos);
+    selected.position.set(
+      previewPos.x,
+      previewPos.y - cachedHeight / 2,
+      previewPos.z
+    );
+
+    // mark occupied
+    setOccupied(previewPos, selected);
 
     removePreview();
     raycasterSystem.clearSelection?.();
   }
 
-  // =========================
-  // CLEAN CLICK
-  // =========================
-  function onPointerDown(event) {
-    if (event.button !== 0) return;
-
-    if (!raycasterSystem.isPlacing()) {
-      removePreview();
-    }
-  }
-
-  // =========================
-  // ESC CANCEL
-  // =========================
-  function onKeyDown(event) {
-    if (event.key === 'Escape') {
-      removePreview();
-    }
-  }
-
-  // =========================
-  // BIND EVENTS
-  // =========================
+  // BIND EVENTS AND DISPOSE
   domElement.addEventListener('pointermove', onPointerMove);
   domElement.addEventListener('contextmenu', onRightClick);
-  domElement.addEventListener('pointerdown', onPointerDown);
-  window.addEventListener('keydown', onKeyDown);
 
-  // =========================
-  // CLEANUP
-  // =========================
-  function dispose() {
-    domElement.removeEventListener('pointermove', onPointerMove);
-    domElement.removeEventListener('contextmenu', onRightClick);
-    domElement.removeEventListener('pointerdown', onPointerDown);
-    window.removeEventListener('keydown', onKeyDown);
-
-    removePreview();
-  }
-
-  return { dispose };
+  return {
+    dispose() {
+      domElement.removeEventListener('pointermove', onPointerMove);
+      domElement.removeEventListener('contextmenu', onRightClick);
+      removePreview();
+    }
+  };
 }

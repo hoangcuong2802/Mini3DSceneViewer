@@ -12,9 +12,7 @@ export function setupGUI(scene, renderer, perf, raycasterSystem) {
     showBoundingBox: false
   };
 
-  // =========================
   // SAFE GET SELECTED
-  // =========================
   function getSelectedSafe() {
     return raycasterSystem &&
       typeof raycasterSystem.getSelected === 'function'
@@ -22,9 +20,7 @@ export function setupGUI(scene, renderer, perf, raycasterSystem) {
       : null;
   }
 
-  // =========================
   // WIREFRAME TOGGLE
-  // =========================
   gui.add(params, 'wireframe').onChange(val => {
     scene.traverse(obj => {
       if (obj.isMesh && obj.material) {
@@ -33,13 +29,11 @@ export function setupGUI(scene, renderer, perf, raycasterSystem) {
     });
   });
 
-  // =========================
   // BOUNDING BOX (OPTIMIZED + SAFE)
-  // =========================
   let boxHelper = null;
 
   gui.add(params, 'showBoundingBox').onChange(val => {
-    // remove box cũ
+    // remove old box 
     if (boxHelper) {
       scene.remove(boxHelper);
       boxHelper = null;
@@ -54,9 +48,7 @@ export function setupGUI(scene, renderer, perf, raycasterSystem) {
     scene.add(boxHelper);
   });
 
-  // =========================
   // PERFORMANCE STATS
-  // =========================
   const stats = {
     fps: 0,
     ms: 0
@@ -69,9 +61,7 @@ export function setupGUI(scene, renderer, perf, raycasterSystem) {
   let smoothFPS = 0;
   let smoothMS = 0;
 
-  // =========================
   // UPDATE LOOP
-  // =========================
   return {
     update(delta) {
       if (!delta) delta = 0.016;
@@ -89,25 +79,23 @@ export function setupGUI(scene, renderer, perf, raycasterSystem) {
         acc = 0;
       }
 
-      // =========================
       // UPDATE BOUNDING BOX (SAFE)
-      // =========================
       if (params.showBoundingBox) {
         const selected = getSelectedSafe();
 
-        // nếu mất selection → remove box
+        // remove box when unselect
         if (!selected && boxHelper) {
           scene.remove(boxHelper);
           boxHelper = null;
         }
 
-        // nếu có selection nhưng chưa có box → tạo
+        // select but no box
         if (selected && !boxHelper) {
           boxHelper = new THREE.BoxHelper(selected, 0xffff00);
           scene.add(boxHelper);
         }
 
-        // update vị trí box
+        // update box position
         if (selected && boxHelper) {
           boxHelper.setFromObject(selected);
         }

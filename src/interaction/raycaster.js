@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 
-// Performance: use emissive highlighting instead of cloning materials
-// to avoid GPU memory overhead.
+// Performance: 
+//  - use emissive highlighting instead of cloning materials globally
+//  - apply lazy material cloning only when needed
+//  - avoid GPU memory overhead
 
 export function setupRaycaster(camera, pickables, domElement) {
   const raycaster = new THREE.Raycaster();
@@ -10,6 +12,7 @@ export function setupRaycaster(camera, pickables, domElement) {
   let selected = null;
   let placementMode = false;
 
+  // POINTER DOWN EVENT
   function onPointerDown(event) {
     if (event.button !== 0) return;
 
@@ -20,6 +23,7 @@ export function setupRaycaster(camera, pickables, domElement) {
 
     const hits = raycaster.intersectObjects(pickables, true);
 
+    // clear old selection
     if (selected) {
       resetHighlight(selected);
       selected = null;
@@ -36,19 +40,12 @@ export function setupRaycaster(camera, pickables, domElement) {
     }
   }
 
-  // 👉 attach vào canvas
+  // attach into canvas
   domElement.addEventListener('pointerdown', onPointerDown);
 
-  // =========================
-  // CLEANUP
-  // =========================
   function dispose() {
     domElement.removeEventListener('pointerdown', onPointerDown);
   }
-
-  // =========================
-  // (giữ nguyên helper functions)
-  // =========================
 
   function getRootPrefab(obj) {
     while (obj.parent && !obj.userData.isPrefab) {
@@ -57,12 +54,24 @@ export function setupRaycaster(camera, pickables, domElement) {
     return obj;
   }
 
+  // HIGHLIGHT (LAZY CLONE)
   function highlight(obj) {
     obj.traverse(child => {
       if (!child.isMesh || !child.material) return;
 
+      // LAZY CLONE MATERIAL (fix shared material)
+      if (!child.userData._materialCloned) {
+        if (Array.isArray(child.material)) {
+          child.material = child.material.map(m => m.clone());
+        } else {
+          child.material = child.material.clone();
+        }
+        child.userData._materialCloned = true;
+      }
+
       const mat = child.material;
 
+      // store original emissive state
       if (!child.userData._stored) {
         child.userData._stored = true;
         child.userData._emissive = mat.emissive?.clone?.() || null;
@@ -76,6 +85,7 @@ export function setupRaycaster(camera, pickables, domElement) {
     });
   }
 
+  // RESET HIGHLIGHT
   function resetHighlight(obj) {
     obj.traverse(child => {
       if (!child.isMesh || !child.material) return;
@@ -107,4 +117,3 @@ export function setupRaycaster(camera, pickables, domElement) {
     dispose
   };
 }
-
